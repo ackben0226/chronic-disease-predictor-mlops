@@ -1,0 +1,133 @@
+# ============================================================
+# DOCKER COMPOSE FOR LOCAL DEVELOPMENT
+# ============================================================
+#
+# This runs the FastAPI application with additional services.
+# 
+# Run: docker-compose up
+# Stop: docker-compose down
+#
+# ============================================================
+
+version: '3.8'
+
+services:
+  # ============================================================
+  # API Service
+  # ============================================================
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: health-predictor:${TAG:-latest}
+    container_name: health-predictor-api
+    ports:
+      - "${PORT:-8000}:8000"
+    environment:
+      - ENVIRONMENT=development
+      - LOG_LEVEL=DEBUG
+      - MODEL_PATH=/app/models/chronic_disease_predictor_v1.0.joblib
+      - PORT=8000
+      - WORKERS=2
+      - ALLOWED_ORIGINS=http://localhost:3000,http://localhost:8080
+    volumes:
+      # Mount code for development (so changes reflect without rebuild)
+      - ./src:/app/src
+      - ./deployment:/app/deployment
+      - ./scripts:/app/scripts
+      # Mount models so you can update without rebuild
+      - ./models:/app/models
+      # Mount logs
+      - ./logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    networks:
+      - health-network
+
+  # ============================================================
+  # Optional: Redis Cache
+  # ============================================================
+  redis:
+    image: redis:7-alpine
+    container_name: health-predictor-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - health-network
+    restart: unless-stopped
+
+  # ============================================================
+  # Optional: PostgreSQL for storing predictions
+  # ============================================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: health-predictor-db
+    environment:
+      POSTGRES_USER: health
+      POSTGRES_PASSWORD: health_password
+      POSTGRES_DB: predictions
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - health-network
+    restart: unless-stopped
+
+  # ============================================================
+  # Optional: Prometheus for metrics
+  # ============================================================
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: health-predictor-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    networks:
+      - health-network
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
+  # ============================================================
+  # Optional: Grafana for dashboards
+  # ============================================================
+  grafana:
+    image: grafana/grafana:latest
+    container_name: health-predictor-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana-data:/var/lib/grafana
+    networks:
+      - health-network
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
+# ============================================================
+# NETWORKS
+# ============================================================
+networks:
+  health-network:
+    driver: bridge
+
+# ============================================================
+# VOLUMES
+# ============================================================
+volumes:
+  redis-data:
+  postgres-data:
+  prometheus-data:
+  grafana-data:

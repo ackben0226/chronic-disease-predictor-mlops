@@ -1,0 +1,36 @@
+{
+  "model_name": "example_predictor",
+  "version": "1.0",
+  "timestamp": "2026-08-30T20:19:20.844144",
+  "model_type": "RandomForestRegressor",
+  "features": [
+    "feat1",
+    "feat2",
+    "feat3",
+    "feat4",
+    "feat5"
+  ],
+  "performance": {
+    "R2": 0.95,
+    "RMSE": 0.15
+  },
+  "parameters": {
+    "bootstrap": true,
+    "ccp_alpha": 0.0,
+    "criterion": "squared_error",
+    "max_depth": null,
+    "max_features": 1.0,
+    "max_leaf_nodes": null,
+    "max_samples": null,
+    "min_impurity_decrease": 0.0,
+    "min_samples_leaf": 1,
+    "min_samples_split": 2,
+    "min_weight_fraction_leaf": 0.0,
+    "monotonic_cst": null,
+    "n_estimators": 10,
+    "oob_score": false,
+    "warm_start": false
+  },
+  "python_version": "3.14.4 (tags/v3.14.4:23116f9, Apr  7 2026, 14:10:54) [MSC v.1944 64 bit (AMD64)]",
+  "platform": "win32"
+}

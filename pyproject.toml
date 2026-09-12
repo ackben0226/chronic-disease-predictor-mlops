@@ -1,0 +1,25 @@
+# ──────────────────────────────────────────
+# 🦅 RUFF — Linting & Formatting
+# ──────────────────────────────────────────
+[tool.ruff]
+line-length = 88                  # Standard line width (matches Black)
+target-version = "py311"           # Match your Python version
+exclude = [".venv", "*.pyc", "__pycache__", ".git"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]  # Catch errors, bugs, imports, best practices
+
+# ──────────────────────────────────────────
+# 🔍 MYPY — Type Checking
+# ──────────────────────────────────────────
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_ignores = true
+check_untyped_defs = true
+ignore_missing_imports = false    # ❌ NEVER set to true globally!
+
+# ✅ Allow pandas specifically (until you install pandas-stubs)
+[[tool.mypy.overrides]]
+module = ["pandas.*"]
+ignore_missing_imports = true
