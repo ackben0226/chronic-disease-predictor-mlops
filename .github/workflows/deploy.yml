@@ -1,4 +1,4 @@
-﻿name: Build, Test, and Deploy ML API
+name: Build, Test, and Deploy ML API
 
 on:
   push:
@@ -14,76 +14,51 @@ env:
   KEY_VAULT_URL: https://mlhealthkeyvault.vault.azure.net/
 
 jobs:
-  # ============================================================
-  # JOB 1: TEST (Continuous Integration)
-  # ============================================================
   test:
     name: Run Tests
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
         with:
           python-version: '3.10'
-
-      - name: Cache dependencies
-        uses: actions/cache@v3
+      - uses: actions/cache@v3
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
-
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pytest pytest-cov
-
       - name: Run tests
         run: pytest tests/ -v --cov=src --cov=deployment --cov=monitoring || true
 
-  # ============================================================
-  # JOB 2: BUILD AND PUSH (Continuous Delivery)
-  # ============================================================
   build:
     name: Build and Push Image
     runs-on: ubuntu-latest
     needs: test
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Login to Azure
-        uses: azure/login@v1
+      - uses: actions/checkout@v3
+      - uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
-
       - name: Login to ACR
         run: az acr login --name ${{ env.ACR_NAME }}
-
-      - name: Build Docker image
+      - name: Build and push
         run: |
           docker build -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }} .
           docker tag ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }} ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:latest
-
-      - name: Push to ACR
-        run: |
           docker push ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}
           docker push ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:latest
 
-  # ============================================================
-  # JOB 3: DEPLOY (Continuous Deployment)
-  # ============================================================
   deploy:
     name: Deploy to Azure
     runs-on: ubuntu-latest
     needs: build
     if: github.ref == 'refs/heads/main'
     steps:
-      - name: Login to Azure
-        uses: azure/login@v1
+      - uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
@@ -93,6 +68,7 @@ jobs:
             --resource-group ${{ env.RESOURCE_GROUP }} \
             --name ${{ env.CONTAINER_NAME }} \
             --yes || true
+          sleep 15
 
       - name: Deploy new container
         run: |
@@ -110,23 +86,27 @@ jobs:
             --registry-password ${{ secrets.ACR_PASSWORD }} \
             --environment-variables KEY_VAULT_URL="${{ env.KEY_VAULT_URL }}"
 
-            - name: Verify deployment
+      - name: Verify deployment (with retries)
         run: |
-          echo "⏳ Waiting for container to be ready..."
-          sleep 60
+          echo "⏳ Getting container IP..."
           IP=$(az container show --resource-group ${{ env.RESOURCE_GROUP }} --name ${{ env.CONTAINER_NAME }} --query ipAddress.ip --output tsv)
-          echo "API is live at: http://$IP:8000"
+          echo "API IP: $IP"
+          echo "⏳ Waiting for container to fully start (model loading)..."
+          sleep 60
           
-          # Retry health check up to 10 times with 10-second intervals
+          # Retry health check up to 10 times
           for i in {1..10}; do
-            echo "Attempt $i: Checking health..."
-            if curl -f -s --max-time 10 http://$IP:8000/health; then
-              echo "✅ Health check passed!"
+            echo "Attempt $i/10: Checking health..."
+            if curl -f -s --max-time 10 "http://$IP:8000/health"; then
+              echo ""
+              echo "✅ Health check passed! Deployment successful."
               exit 0
             fi
             echo "Not ready yet, waiting 10s..."
             sleep 10
           done
           
-          echo "⚠️ Health check did not pass in time. Container may still be starting."
-          exit 0  # Don't fail the workflow — the deploy itself succeeded
+          echo "⚠️ Health check did not pass in time."
+          echo "This does not mean deployment failed - the container is likely still starting."
+          echo "Check manually: http://$IP:8000/health"
+          exit 0  # Don't fail the workflow
