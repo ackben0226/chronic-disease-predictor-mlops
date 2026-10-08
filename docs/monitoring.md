@@ -10,7 +10,7 @@ The system uses three layers of monitoring:
 2. **Custom Drift Detection** — Feature distribution drift
 3. **Health Endpoints** — Liveness and readiness probes
 
-## Application Insights
+## Application Insights 
 
 ### Setup
 
